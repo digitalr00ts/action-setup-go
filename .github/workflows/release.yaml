@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency: ${{ github.workflow }}
+
+jobs:
+  changelog:
+    name: Generate Changelog
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v2
+      - id: changelog
+        uses: TriPSs/conventional-changelog-action@v3
+        with:
+          git-user-name: github-actions[bot]
+          git-user-email: 41898282+github-actions[bot]@users.noreply.github.com
+          github-token: ${{ github.token }}
+          skip-version-file: true
+      - name: Push tags
+        run: |
+          version='${{ steps.changelog.outputs.tag }}'
+          for tag in ${version%.*.*} ${version%.*} latest; do
+            git tag --force ${tag}
+            git push --force origin ${tag}
+          done
+      - uses: ncipollo/release-action@v1
+        with:
+          body: |
+            ${{ steps.changelog.outputs.clean_changelog }}
+          tag: ${{ steps.changelog.outputs.tag }}
